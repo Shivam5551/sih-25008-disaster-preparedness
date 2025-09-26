@@ -13,6 +13,8 @@ import {
 	CheckCircle
 } from 'lucide-react';
 import { GameStats } from './game-types';
+import { GameRenderer } from './game-renderer';
+import { HealthBar, TimerDisplay, ObjectiveDisplay, SafeZoneIndicator, MiniMap } from './enhanced-ui';
 
 interface Game2DProps {
 	gameStats: GameStats;
@@ -257,98 +259,101 @@ export function Game2D({ gameStats, setGameStats, onGameComplete }: Game2DProps)
 			);
 		}
 
-		// Draw game objects with better graphics
+		// Update and render particles
+		const timestamp = Date.now();
+		GameRenderer.updateParticles(ctx, 16.67);
+
+		// Draw game objects with enhanced graphics
 		level.objects?.forEach(obj => {
-			ctx.save();
-			
 			switch (obj.type) {
-				case 'table': {
-					// Draw table with 3D effect
-					ctx.fillStyle = '#D2691E';
-					ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
-					ctx.fillStyle = '#8B4513';
-					ctx.fillRect(obj.x + 5, obj.y + 5, obj.width - 10, obj.height - 10);
-					// Table legs
-					ctx.fillStyle = '#654321';
-					const legWidth = 6;
-					ctx.fillRect(obj.x + 5, obj.y + obj.height - 15, legWidth, 15);
-					ctx.fillRect(obj.x + obj.width - 11, obj.y + obj.height - 15, legWidth, 15);
-					ctx.fillRect(obj.x + 5, obj.y + obj.height - 15, legWidth, 15);
-					ctx.fillRect(obj.x + obj.width - 11, obj.y + obj.height - 15, legWidth, 15);
+				case 'table':
+					GameRenderer.renderTable(ctx, obj);
 					break;
-				}
-					
 				case 'hazard':
+					// Keep specialized hazard rendering for earthquake game
 					if (obj.id.includes('building')) {
-						// Draw building with windows
+						// Enhanced building rendering with windows
+						ctx.save();
 						ctx.fillStyle = '#696969';
 						ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
 						ctx.fillStyle = '#87CEEB';
-						// Windows
+						// Windows with frames
 						for (let i = 0; i < 3; i++) {
 							for (let j = 0; j < Math.floor(obj.height / 40); j++) {
-								ctx.fillRect(obj.x + 10 + i * 25, obj.y + 20 + j * 40, 15, 20);
+								const winX = obj.x + 10 + i * 25;
+								const winY = obj.y + 20 + j * 40;
+								// Window frame
+								ctx.fillStyle = '#654321';
+								ctx.fillRect(winX - 2, winY - 2, 19, 24);
+								// Glass
+								ctx.fillStyle = '#87CEEB';
+								ctx.fillRect(winX, winY, 15, 20);
+								// Reflection
+								ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+								ctx.fillRect(winX, winY, 7, 10);
 							}
 						}
+						ctx.restore();
 					} else if (obj.id.includes('tv')) {
-						// Draw TV with screen
-						ctx.fillStyle = '#2F2F2F';
+						// Enhanced TV rendering
+						ctx.save();
+						const gradient = ctx.createLinearGradient(obj.x, obj.y, obj.x, obj.y + obj.height);
+						gradient.addColorStop(0, '#4F4F4F');
+						gradient.addColorStop(1, '#2F2F2F');
+						ctx.fillStyle = gradient;
 						ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+						// Screen
 						ctx.fillStyle = '#000080';
 						ctx.fillRect(obj.x + 5, obj.y + 5, obj.width - 10, obj.height - 15);
-						ctx.fillStyle = '#FF0000';
-						ctx.fillRect(obj.x + obj.width - 15, obj.y + obj.height - 8, 8, 6);
-					} else if (obj.id.includes('window')) {
-						// Draw window with frame
-						ctx.fillStyle = '#8B4513';
-						ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
-						ctx.fillStyle = '#87CEEB';
-						ctx.fillRect(obj.x + 8, obj.y + 8, obj.width - 16, obj.height - 16);
-						// Window cross
-						ctx.fillStyle = '#654321';
-						ctx.fillRect(obj.x + obj.width/2 - 2, obj.y + 8, 4, obj.height - 16);
-						ctx.fillRect(obj.x + 8, obj.y + obj.height/2 - 2, obj.width - 16, 4);
+						// Power indicator
+						ctx.fillStyle = isShaking ? '#FF0000' : '#00FF00';
+						ctx.beginPath();
+						ctx.arc(obj.x + obj.width - 10, obj.y + obj.height - 5, 3, 0, Math.PI * 2);
+						ctx.fill();
+						ctx.restore();
 					} else {
-						// Default hazard rendering
+						// Default hazard with warning effect
+						ctx.save();
 						ctx.fillStyle = obj.color;
 						ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+						if (isShaking) {
+							ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+							ctx.lineWidth = 2;
+							ctx.strokeRect(obj.x - 1, obj.y - 1, obj.width + 2, obj.height + 2);
+						}
+						ctx.restore();
 					}
 					break;
-					
 				case 'safe_zone':
-					// Draw park area with trees
+					// Enhanced park area
+					ctx.save();
 					ctx.fillStyle = '#90EE90';
 					ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
-					// Add some tree sprites
-					ctx.fillStyle = '#228B22';
+					// Enhanced trees
 					for (let i = 0; i < 3; i++) {
 						const treeX = obj.x + 20 + i * 60;
 						const treeY = obj.y + 30;
-						ctx.beginPath();
-						ctx.arc(treeX, treeY, 15, 0, Math.PI * 2);
-						ctx.fill();
-						ctx.fillStyle = '#8B4513';
-						ctx.fillRect(treeX - 3, treeY, 6, 20);
-						ctx.fillStyle = '#228B22';
+						GameRenderer.renderTree(ctx, {
+							id: `parktree_${i}`,
+							x: treeX - 15,
+							y: treeY - 50,
+							width: 30,
+							height: 70,
+							type: 'tree',
+							color: '#228B22'
+						}, timestamp);
 					}
+					ctx.restore();
 					break;
-					
 				default:
+					ctx.save();
 					ctx.fillStyle = obj.color;
 					ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+					ctx.restore();
 			}
 			
-			// Add glow effect for interactive objects
-			if (obj.interactive) {
-				ctx.shadowColor = '#00FF00';
-				ctx.shadowBlur = 15;
-				ctx.strokeStyle = '#00FF00';
-				ctx.lineWidth = 3;
-				ctx.strokeRect(obj.x - 2, obj.y - 2, obj.width + 4, obj.height + 4);
-				ctx.shadowBlur = 0;
-			}
-			
-			ctx.restore();
+			// Add interactive glow effect
+			GameRenderer.addInteractiveGlow(ctx, obj, 1, timestamp);
 		});
 
 		// Draw safe zones with animated pulsing effect
@@ -382,77 +387,133 @@ export function Game2D({ gameStats, setGameStats, onGameComplete }: Game2DProps)
 			ctx.restore();
 		});
 
-		// Draw player with better sprite
-		ctx.save();
-		ctx.translate(playerPosition.x + 10, playerPosition.y + 10);
+		// Draw player with enhanced renderer
+		const playerState = levelComplete ? 'safe' : 
+						   level.safeZones?.some(zone => 
+							   playerPosition.x >= zone.x &&
+							   playerPosition.x <= zone.x + zone.width &&
+							   playerPosition.y >= zone.y &&
+							   playerPosition.y <= zone.y + zone.height
+						   ) ? 'hiding' : 'running';
 		
-		// Player body
-		if (levelComplete) {
-			ctx.fillStyle = '#00FF00'; // Green when safe
-			ctx.shadowColor = '#00FF00';
-			ctx.shadowBlur = 10;
-		} else if (playerHealth < 50) {
-			ctx.fillStyle = '#FF4444'; // Red when injured
-			ctx.shadowColor = '#FF0000';
-			ctx.shadowBlur = 8;
-		} else {
-			ctx.fillStyle = '#4A90E2'; // Blue when healthy
-			ctx.shadowColor = '#4A90E2';
-			ctx.shadowBlur = 5;
-		}
-		
-		// Player shape (better than simple rectangle)
-		ctx.beginPath();
-		ctx.arc(0, -5, 8, 0, Math.PI * 2); // Head
-		ctx.fill();
-		
-		ctx.fillRect(-6, -5, 12, 15); // Body
-		
-		// Arms
-		ctx.fillRect(-10, -2, 4, 8);
-		ctx.fillRect(6, -2, 4, 8);
-		
-		// Legs
-		ctx.fillRect(-4, 10, 3, 8);
-		ctx.fillRect(1, 10, 3, 8);
-		
-		ctx.shadowBlur = 0;
-		ctx.restore();
+		GameRenderer.renderPlayer(ctx, playerPosition.x, playerPosition.y, playerHealth, playerState, timestamp);
 
-		// Add particle effects during earthquake
+		// Enhanced particle effects during earthquake
 		if (isShaking) {
-			// Dust and debris particles
-			for (let i = 0; i < 15; i++) {
-				ctx.fillStyle = `rgba(139, 69, 19, ${Math.random() * 0.6})`;
-				ctx.fillRect(
-					Math.random() * canvas.width,
-					Math.random() * canvas.height,
-					Math.random() * 3 + 1,
-					Math.random() * 3 + 1
-				);
+			// Animated dust clouds
+			for (let i = 0; i < 25; i++) {
+				const dustX = Math.random() * canvas.width;
+				const dustY = Math.random() * canvas.height;
+				const dustSize = Math.random() * 4 + 1;
+				const opacity = Math.random() * 0.4 + 0.2;
+				const movement = Math.sin(timestamp * 0.01 + i) * 2;
+				
+				ctx.fillStyle = `rgba(139, 69, 19, ${opacity})`;
+				ctx.beginPath();
+				ctx.arc(dustX + movement, dustY, dustSize, 0, Math.PI * 2);
+				ctx.fill();
 			}
 			
-			// Crack lines effect
-			ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-			for (let i = 0; i < 5; i++) {
-				ctx.moveTo(Math.random() * canvas.width, canvas.height - 10);
-				ctx.lineTo(Math.random() * canvas.width, canvas.height - Math.random() * 50);
+			// Screen shake screen overlay
+			const shakeIntensity = Math.sin(timestamp * 0.02) * 0.1;
+			ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(shakeIntensity)})`;
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			
+			// Enhanced crack lines with branching
+			ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+			ctx.lineWidth = 3;
+			ctx.lineCap = 'round';
+			
+			for (let i = 0; i < 8; i++) {
+				const startX = Math.random() * canvas.width;
+				const crackLength = Math.random() * 80 + 40;
+				const branches = Math.floor(Math.random() * 3) + 1;
+				
+				ctx.beginPath();
+				ctx.moveTo(startX, canvas.height - 10);
+				
+				let currentX = startX;
+				let currentY = canvas.height - 10;
+				
+				for (let j = 0; j < branches; j++) {
+					const segmentLength = crackLength / branches;
+					const endX = currentX + (Math.random() - 0.5) * 30;
+					const endY = currentY - segmentLength;
+					
+					ctx.lineTo(endX, endY);
+					currentX = endX;
+					currentY = endY;
+				}
+				ctx.stroke();
 			}
-			ctx.stroke();
+			
+			// Falling debris with better physics
+			debris.forEach(d => {
+				ctx.save();
+				ctx.translate(d.x + 5, d.y + 5);
+				ctx.rotate(timestamp * 0.008 + d.id.length);
+				
+				// Enhanced debris with fragments
+				const gradient = ctx.createRadialGradient(0, 0, 2, 0, 0, 8);
+				gradient.addColorStop(0, '#8B4513');
+				gradient.addColorStop(0.7, '#A0522D');
+				gradient.addColorStop(1, '#654321');
+				
+				ctx.fillStyle = gradient;
+				ctx.fillRect(-6, -6, 12, 12);
+				
+				// Add sparks/dust trail
+				for (let i = 0; i < 3; i++) {
+					ctx.fillStyle = `rgba(255, 200, 100, ${Math.random() * 0.6})`;
+					const sparkX = (Math.random() - 0.5) * 8;
+					const sparkY = (Math.random() - 0.5) * 8;
+					ctx.fillRect(sparkX, sparkY, 2, 2);
+				}
+				
+				ctx.restore();
+			});
 		}
 
-		// Add warning indicators near hazards
+		// Enhanced warning indicators with danger zones
 		if (isShaking) {
 			level.hazards?.forEach(hazard => {
+				// Danger zone indicator
+				const pulseIntensity = 0.3 + 0.4 * Math.sin(timestamp * 0.015);
+				ctx.fillStyle = `rgba(255, 0, 0, ${pulseIntensity * 0.2})`;
+				ctx.fillRect(hazard.x - 10, hazard.y - 10, hazard.width + 20, hazard.height + 20);
+				
+				// Warning icon with glow effect
 				ctx.save();
-				ctx.translate(hazard.x + hazard.width/2, hazard.y - 20);
-				ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + 0.3 * Math.sin(Date.now() * 0.01)})`;
-				ctx.font = 'bold 16px Arial';
+				ctx.translate(hazard.x + hazard.width/2, hazard.y - 25);
+				ctx.shadowColor = '#FF0000';
+				ctx.shadowBlur = 15 * pulseIntensity;
+				ctx.fillStyle = `rgba(255, 0, 0, ${0.8 + 0.2 * Math.sin(timestamp * 0.02)})`;
+				ctx.font = 'bold 20px Arial';
 				ctx.textAlign = 'center';
 				ctx.fillText('⚠️', 0, 0);
+				
+				// Danger text
+				ctx.shadowBlur = 5;
+				ctx.fillStyle = `rgba(255, 255, 255, ${pulseIntensity})`;
+				ctx.font = 'bold 10px Arial';
+				ctx.fillText('DANGER', 0, 15);
+				
 				ctx.restore();
+				
+				// Electrical sparks for electronics
+				if (hazard.damage > 25 && Math.random() < 0.1) {
+					for (let i = 0; i < 3; i++) {
+						const sparkX = hazard.x + Math.random() * hazard.width;
+						const sparkY = hazard.y + Math.random() * hazard.height;
+						
+						ctx.strokeStyle = `rgba(255, 255, 0, ${Math.random()})`;
+						ctx.lineWidth = 2;
+						ctx.beginPath();
+						ctx.moveTo(sparkX, sparkY);
+						ctx.lineTo(sparkX + (Math.random() - 0.5) * 20, sparkY + (Math.random() - 0.5) * 20);
+						ctx.stroke();
+					}
+				}
 			});
 		}
 
@@ -594,40 +655,53 @@ export function Game2D({ gameStats, setGameStats, onGameComplete }: Game2DProps)
 
 	return (
 		<div className="max-w-6xl mx-auto">
-			{/* Game Header */}
+			{/* Enhanced Game Header */}
 			<div className="bg-card rounded-lg border p-4 mb-4">
-				<div className="flex justify-between items-center mb-2">
+				<div className="flex justify-between items-start mb-3">
 					<div>
 						<h3 className="text-xl font-bold">{level?.name || 'Loading...'}</h3>
 						<p className="text-sm text-muted-foreground">{level?.description || ''}</p>
 					</div>
-					<div className="flex items-center space-x-6 text-sm">
-						<div className="flex items-center space-x-2">
-							<Trophy className="h-4 w-4 text-yellow-500" />
-							<span className="font-semibold">{gameStats.score} pts</span>
-						</div>
-						<div className="flex items-center space-x-2">
-							<Timer className="h-4 w-4 text-blue-500" />
-							<span className={timeLeft <= 5 ? 'text-red-500 font-bold' : ''}>{timeLeft}s</span>
-						</div>
-						<div className="flex items-center space-x-1">
-							{Array.from({ length: 3 }).map((_, i) => (
-								<Heart 
-									key={i} 
-									className={`w-4 h-4 ${i < gameStats.lives ? 'text-red-500 fill-current' : 'text-gray-300'}`} 
-								/>
+					
+					{/* Safe zone distance indicator */}
+					{level && level.safeZones.length > 0 && (
+						<SafeZoneIndicator
+							distance={Math.round(Math.min(
+								...level.safeZones.map(zone => 
+									Math.sqrt(
+										Math.pow(playerPosition.x - (zone.x + zone.width/2), 2) + 
+										Math.pow(playerPosition.y - (zone.y + zone.height/2), 2)
+									)
+								)
 							))}
-						</div>
-						<div className="text-sm">
-							Health: <span className={`font-bold ${playerHealth > 50 ? 'text-green-500' : playerHealth > 25 ? 'text-yellow-500' : 'text-red-500'}`}>
-								{playerHealth}%
-							</span>
-						</div>
+							direction={(level.safeZones[0]?.x ?? 0) > playerPosition.x ? 'right' : 'left'}
+							isInSafeZone={level.safeZones.some(zone => 
+								playerPosition.x >= zone.x &&
+								playerPosition.x <= zone.x + zone.width &&
+								playerPosition.y >= zone.y &&
+								playerPosition.y <= zone.y + zone.height
+							)}
+						/>
+					)}
+				</div>
+				
+				<div className="flex flex-wrap items-center gap-3 mb-3">
+					<div className="flex items-center space-x-2 bg-yellow-500/10 rounded-lg px-3 py-2">
+						<Trophy className="w-5 h-5 text-yellow-500" />
+						<span className="font-bold text-yellow-600">{gameStats.score}</span>
 					</div>
+					<TimerDisplay 
+						timeLeft={timeLeft} 
+						totalTime={level?.timeLimit || 15} 
+						isUrgent={timeLeft <= 5}
+					/>
+					<HealthBar health={playerHealth} animated={true} />
 				</div>
-				<div className="text-sm font-medium text-blue-600">
-					🎯 {level?.objective || 'Loading objective...'}
-				</div>
+				
+				<ObjectiveDisplay 
+					objective={level?.objective || 'Loading objective...'}
+					isComplete={levelComplete}
+				/>
 			</div>
 
 			{/* Instructions */}
@@ -667,11 +741,26 @@ export function Game2D({ gameStats, setGameStats, onGameComplete }: Game2DProps)
 						filter: isShaking ? 'blur(0.5px)' : 'none'
 					}}
 				/>
-				{/* Corner decorations */}
-				<div className="absolute top-2 left-2 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
-				<div className="absolute top-2 right-2 w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
-				<div className="absolute bottom-2 left-2 w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
-				<div className="absolute bottom-2 right-2 w-4 h-4 bg-yellow-500 rounded-full animate-pulse"></div>
+				
+				{/* Earthquake intensity indicator */}
+				<div className="absolute top-2 left-2 flex items-center space-x-2 bg-black/40 rounded-lg px-3 py-2 backdrop-blur-sm">
+					<AlertTriangle className={`w-5 h-5 ${isShaking ? 'text-red-400 animate-pulse' : 'text-yellow-400'}`} />
+					<span className="text-white text-sm font-bold">
+						{isShaking ? 'EARTHQUAKE!' : 'SAFE'}
+					</span>
+				</div>
+				
+				{/* Mini Map */}
+				{level && (
+					<div className="absolute bottom-2 right-2">
+						<MiniMap
+							playerPosition={playerPosition}
+							safeZones={level.safeZones || []}
+							hazards={level.hazards || []}
+							canvasSize={{ width: 900, height: 400 }}
+						/>
+					</div>
+				)}
 			</div>
 
 			{/* Level Progress Indicator */}

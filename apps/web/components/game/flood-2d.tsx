@@ -15,6 +15,8 @@ import {
 	Navigation
 } from 'lucide-react';
 import { GameStats } from './game-types';
+import { GameRenderer } from './game-renderer';
+import { HealthBar, StaminaBar, TimerDisplay, ObjectiveDisplay, WaterLevelIndicator, MiniMap } from './enhanced-ui';
 
 interface FloodGame2DProps {
 	gameStats: GameStats;
@@ -291,118 +293,63 @@ export function FloodGame2D({ gameStats, setGameStats, onGameComplete }: FloodGa
 		ctx.fillStyle = gradient;
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+		// Update and render particles
+		const timestamp = Date.now();
+		GameRenderer.updateParticles(ctx, 16.67); // ~60fps
+
 		// Draw ground/buildings before water
 		level.objects?.forEach(obj => {
-			ctx.save();
-			
 			// Check if object is floating
 			const floating = floatingObjects.find(f => f.id === obj.id);
-			const objX = floating ? floating.x : obj.x;
-			const objY = floating ? floating.y : obj.y;
+			const enhancedObj = {
+				...obj,
+				x: floating ? floating.x : obj.x,
+				y: floating ? floating.y : obj.y,
+			};
 			
+			// Use enhanced renderer based on type
 			switch (obj.type) {
-				case 'house': {
-					// Draw house with roof
-					ctx.fillStyle = obj.color;
-					ctx.fillRect(objX, objY, obj.width, obj.height);
-					// Roof
-					ctx.fillStyle = '#8B0000';
-					ctx.beginPath();
-					ctx.moveTo(objX - 5, objY);
-					ctx.lineTo(objX + obj.width/2, objY - 20);
-					ctx.lineTo(objX + obj.width + 5, objY);
-					ctx.closePath();
-					ctx.fill();
-					// Windows
-					ctx.fillStyle = '#87CEEB';
-					ctx.fillRect(objX + 10, objY + 20, 15, 15);
-					ctx.fillRect(objX + obj.width - 25, objY + 20, 15, 15);
-					// Door
-					ctx.fillStyle = '#654321';
-					ctx.fillRect(objX + obj.width/2 - 8, objY + 35, 16, 25);
+				case 'house':
+					GameRenderer.renderHouse(ctx, enhancedObj, timestamp);
 					break;
-				}
-				case 'shelter': {
-					// Draw emergency shelter
-					ctx.fillStyle = obj.color;
-					ctx.fillRect(objX, objY, obj.width, obj.height);
-					// Emergency sign
-					ctx.fillStyle = '#FFFFFF';
-					ctx.font = 'bold 14px Arial';
-					ctx.textAlign = 'center';
-					ctx.fillText('🏥', objX + obj.width/2, objY + obj.height/2);
-					// Red cross
-					ctx.fillStyle = '#FF0000';
-					ctx.fillRect(objX + obj.width/2 - 2, objY + 10, 4, obj.height - 20);
-					ctx.fillRect(objX + 20, objY + obj.height/2 - 2, obj.width - 40, 4);
+				case 'shelter':
+					GameRenderer.renderShelter(ctx, enhancedObj, timestamp);
 					break;
-				}
-				case 'car': {
-					// Draw car
-					ctx.fillStyle = obj.color;
-					ctx.fillRect(objX, objY, obj.width, obj.height);
-					// Windows
-					ctx.fillStyle = '#87CEEB';
-					ctx.fillRect(objX + 5, objY + 5, obj.width - 10, obj.height - 15);
-					// Wheels
-					ctx.fillStyle = '#000000';
-					ctx.beginPath();
-					ctx.arc(objX + 10, objY + obj.height, 5, 0, Math.PI * 2);
-					ctx.arc(objX + obj.width - 10, objY + obj.height, 5, 0, Math.PI * 2);
-					ctx.fill();
+				case 'car':
+					GameRenderer.renderCar(ctx, enhancedObj, !!floating, timestamp);
 					break;
-				}
-				case 'boat': {
-					// Draw boat
-					ctx.fillStyle = obj.color;
-					ctx.beginPath();
-					ctx.moveTo(objX, objY + obj.height);
-					ctx.lineTo(objX + obj.width, objY + obj.height);
-					ctx.lineTo(objX + obj.width - 10, objY);
-					ctx.lineTo(objX + 10, objY);
-					ctx.closePath();
-					ctx.fill();
-					// Mast
-					ctx.fillStyle = '#8B4513';
-					ctx.fillRect(objX + obj.width/2 - 1, objY - 20, 2, 20);
+				case 'boat':
+					GameRenderer.renderBoat(ctx, enhancedObj, timestamp);
 					break;
-				}
-				case 'tree': {
-					// Draw tree
-					ctx.fillStyle = '#8B4513';
-					ctx.fillRect(objX + obj.width/2 - 3, objY + obj.height - 20, 6, 20);
-					ctx.fillStyle = obj.color;
-					ctx.beginPath();
-					ctx.arc(objX + obj.width/2, objY + obj.height - 30, 15, 0, Math.PI * 2);
-					ctx.fill();
+				case 'tree':
+					GameRenderer.renderTree(ctx, enhancedObj, timestamp);
 					break;
-				}
-				default: {
+				default:
+					// Fallback to basic rendering
+					ctx.save();
 					ctx.fillStyle = obj.color;
-					ctx.fillRect(objX, objY, obj.width, obj.height);
-				}
+					ctx.fillRect(enhancedObj.x, enhancedObj.y, obj.width, obj.height);
+					ctx.restore();
 			}
 			
-			// Add glow effect for interactive objects
-			if (obj.interactive) {
-				ctx.shadowColor = '#00FF00';
-				ctx.shadowBlur = 10;
-				ctx.strokeStyle = '#00FF00';
-				ctx.lineWidth = 2;
-				ctx.strokeRect(objX - 2, objY - 2, obj.width + 4, obj.height + 4);
-				ctx.shadowBlur = 0;
-			}
-			
-			ctx.restore();
+			// Add interactive glow effect
+			GameRenderer.addInteractiveGlow(ctx, enhancedObj, 1, timestamp);
 		});
 
-		// Draw water with wave effect
-		const waveOffset = Date.now() * 0.003;
-		ctx.fillStyle = 'rgba(0, 100, 200, 0.7)';
+		// Enhanced water rendering with multiple layers
+		const waveOffset = timestamp * 0.003;
+		
+		// Main water body with gradient
+		const waterGradient = ctx.createLinearGradient(0, waterLevel, 0, canvas.height);
+		waterGradient.addColorStop(0, 'rgba(0, 150, 255, 0.8)');
+		waterGradient.addColorStop(0.5, 'rgba(0, 100, 200, 0.9)');
+		waterGradient.addColorStop(1, 'rgba(0, 50, 150, 1)');
+		ctx.fillStyle = waterGradient;
+		
 		ctx.beginPath();
 		ctx.moveTo(0, waterLevel);
-		for (let x = 0; x <= canvas.width; x += 10) {
-			const waveHeight = Math.sin(x * 0.02 + waveOffset) * 5;
+		for (let x = 0; x <= canvas.width; x += 8) {
+			const waveHeight = Math.sin(x * 0.02 + waveOffset) * 6 + Math.sin(x * 0.05 + waveOffset * 1.5) * 2;
 			ctx.lineTo(x, waterLevel + waveHeight);
 		}
 		ctx.lineTo(canvas.width, canvas.height);
@@ -410,33 +357,66 @@ export function FloodGame2D({ gameStats, setGameStats, onGameComplete }: FloodGa
 		ctx.closePath();
 		ctx.fill();
 
-		// Draw water surface reflection
-		ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+		// Water surface reflections and foam
+		ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
 		ctx.beginPath();
 		ctx.moveTo(0, waterLevel);
-		for (let x = 0; x <= canvas.width; x += 15) {
-			const waveHeight = Math.sin(x * 0.03 + waveOffset * 2) * 3;
-			ctx.lineTo(x, waterLevel + waveHeight);
+		for (let x = 0; x <= canvas.width; x += 12) {
+			const waveHeight = Math.sin(x * 0.03 + waveOffset * 2) * 4;
+			ctx.lineTo(x, waterLevel + waveHeight - 2);
 		}
-		ctx.lineTo(canvas.width, waterLevel);
+		ctx.lineTo(canvas.width, waterLevel - 2);
 		ctx.closePath();
 		ctx.fill();
 
-		// Draw current flow indicators
+		// Foam bubbles and splash effects
+		for (let i = 0; i < 15; i++) {
+			const bubbleX = (timestamp * 0.05 + i * 60) % canvas.width;
+			const bubbleY = waterLevel + Math.sin(timestamp * 0.008 + i) * 8;
+			const bubbleSize = 2 + Math.sin(timestamp * 0.01 + i) * 1;
+			
+			ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(timestamp * 0.01 + i) * 0.2})`;
+			ctx.beginPath();
+			ctx.arc(bubbleX, bubbleY, bubbleSize, 0, Math.PI * 2);
+			ctx.fill();
+		}
+
+		// Enhanced current flow indicators with particle trails
 		if (level.currentFlow.x > 0) {
-			ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-			ctx.lineWidth = 2;
-			for (let i = 0; i < 5; i++) {
-				const x = (Date.now() * 0.1 + i * 100) % canvas.width;
-				const y = waterLevel + 10;
+			// Main current arrows
+			ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+			ctx.lineWidth = 3;
+			ctx.lineCap = 'round';
+			
+			for (let i = 0; i < 8; i++) {
+				const x = (timestamp * 0.15 + i * 120) % (canvas.width + 40) - 20;
+				const y = waterLevel + 15 + Math.sin(timestamp * 0.005 + i) * 5;
+				const opacity = Math.max(0, Math.min(1, (canvas.width - Math.abs(x - canvas.width/2)) / (canvas.width/2)));
+				
+				ctx.globalAlpha = opacity * 0.8;
 				ctx.beginPath();
 				ctx.moveTo(x, y);
-				ctx.lineTo(x + 20, y);
-				ctx.moveTo(x + 15, y - 3);
-				ctx.lineTo(x + 20, y);
-				ctx.lineTo(x + 15, y + 3);
+				ctx.lineTo(x + 25, y);
+				// Arrow head
+				ctx.moveTo(x + 20, y - 4);
+				ctx.lineTo(x + 25, y);
+				ctx.lineTo(x + 20, y + 4);
 				ctx.stroke();
 			}
+			
+			// Water particles showing current
+			ctx.globalAlpha = 0.6;
+			for (let i = 0; i < 20; i++) {
+				const particleX = (timestamp * 0.2 + i * 45) % (canvas.width + 20) - 10;
+				const particleY = waterLevel + 5 + Math.sin(timestamp * 0.008 + i) * 10;
+				const size = 1 + Math.sin(timestamp * 0.01 + i) * 0.5;
+				
+				ctx.fillStyle = 'rgba(173, 216, 230, 0.8)';
+				ctx.beginPath();
+				ctx.arc(particleX, particleY, size, 0, Math.PI * 2);
+				ctx.fill();
+			}
+			ctx.globalAlpha = 1;
 		}
 
 		// Draw safe zones with elevation indicators
@@ -454,60 +434,11 @@ export function FloodGame2D({ gameStats, setGameStats, onGameComplete }: FloodGa
 			}
 		});
 
-		// Draw player with swimming animation
-		ctx.save();
-		ctx.translate(playerPosition.x + 10, playerPosition.y + 10);
-		
-		// Player color based on status
-		if (levelComplete) {
-			ctx.fillStyle = '#00FF00';
-			ctx.shadowColor = '#00FF00';
-			ctx.shadowBlur = 15;
-		} else if (isSwimming) {
-			ctx.fillStyle = '#4A90E2';
-			ctx.shadowColor = '#0066CC';
-			ctx.shadowBlur = 8;
-		} else if (playerHealth < 50) {
-			ctx.fillStyle = '#FF4444';
-			ctx.shadowColor = '#FF0000';
-			ctx.shadowBlur = 8;
-		} else {
-			ctx.fillStyle = '#4A90E2';
-			ctx.shadowColor = '#4A90E2';
-			ctx.shadowBlur = 5;
-		}
-		
-		// Player body (different for swimming)
-		if (isSwimming) {
-			// Swimming position - more horizontal
-			ctx.beginPath();
-			ctx.arc(-3, -5, 6, 0, Math.PI * 2); // Head
-			ctx.fill();
-			ctx.fillRect(-8, -2, 16, 8); // Body horizontal
-			// Swimming arms
-			const armWave = Math.sin(Date.now() * 0.01) * 2;
-			ctx.fillRect(-12, -2 + armWave, 4, 6);
-			ctx.fillRect(8, -2 - armWave, 4, 6);
-			// Legs kicking
-			const legWave = Math.sin(Date.now() * 0.015) * 3;
-			ctx.fillRect(-2, 6 + legWave, 2, 6);
-			ctx.fillRect(2, 6 - legWave, 2, 6);
-		} else {
-			// Normal standing position
-			ctx.beginPath();
-			ctx.arc(0, -5, 8, 0, Math.PI * 2); // Head
-			ctx.fill();
-			ctx.fillRect(-6, -5, 12, 15); // Body
-			// Arms
-			ctx.fillRect(-10, -2, 4, 8);
-			ctx.fillRect(6, -2, 4, 8);
-			// Legs
-			ctx.fillRect(-4, 10, 3, 8);
-			ctx.fillRect(1, 10, 3, 8);
-		}
-		
-		ctx.shadowBlur = 0;
-		ctx.restore();
+		// Draw player with enhanced renderer
+		const playerState = levelComplete ? 'safe' : 
+						   isSwimming ? 'swimming' : 
+						   'running';
+		GameRenderer.renderPlayer(ctx, playerPosition.x, playerPosition.y, playerHealth, playerState, timestamp);
 
 		// Draw water level indicator
 		ctx.fillStyle = 'rgba(0, 100, 200, 0.8)';
@@ -692,48 +623,44 @@ export function FloodGame2D({ gameStats, setGameStats, onGameComplete }: FloodGa
 
 	return (
 		<div className="max-w-6xl mx-auto">
-			{/* Game Header */}
+			{/* Enhanced Game Header */}
 			<div className="bg-card rounded-lg border p-4 mb-4">
-				<div className="flex justify-between items-center mb-2">
+				<div className="flex justify-between items-start mb-3">
 					<div>
 						<h3 className="text-xl font-bold">{level?.name || 'Loading...'}</h3>
 						<p className="text-sm text-muted-foreground">{level?.description || ''}</p>
 					</div>
-					<div className="flex items-center space-x-6 text-sm">
-						<div className="flex items-center space-x-2">
-							<Trophy className="h-4 w-4 text-yellow-500" />
-							<span className="font-semibold">{gameStats.score} pts</span>
-						</div>
-						<div className="flex items-center space-x-2">
-							<Timer className="h-4 w-4 text-blue-500" />
-							<span className={timeLeft <= 10 ? 'text-red-500 font-bold' : ''}>{timeLeft}s</span>
-						</div>
-						<div className="flex items-center space-x-1">
-							{Array.from({ length: 3 }).map((_, i) => (
-								<Heart 
-									key={i} 
-									className={`w-4 h-4 ${i < gameStats.lives ? 'text-red-500 fill-current' : 'text-gray-300'}`} 
-								/>
-							))}
-						</div>
-						<div className="text-sm">
-							Health: <span className={`font-bold ${playerHealth > 50 ? 'text-green-500' : playerHealth > 25 ? 'text-yellow-500' : 'text-red-500'}`}>
-								{Math.round(playerHealth)}%
-							</span>
-						</div>
-						{isSwimming && (
-							<div className="text-sm">
-								<Droplets className="h-4 w-4 inline text-blue-500 mr-1" />
-								Swimming: <span className={`font-bold ${playerStamina > 50 ? 'text-blue-500' : 'text-red-500'}`}>
-									{Math.round(playerStamina)}%
-								</span>
-							</div>
-						)}
+					
+					{level && (
+						<WaterLevelIndicator
+							currentLevel={waterLevel}
+							maxLevel={level.maxWaterLevel}
+							minLevel={level.initialWaterLevel}
+							risingSpeed={level.waterRiseSpeed}
+						/>
+					)}
+				</div>
+				
+				<div className="flex flex-wrap items-center gap-3 mb-3">
+					<div className="flex items-center space-x-2 bg-yellow-500/10 rounded-lg px-3 py-2">
+						<Trophy className="w-5 h-5 text-yellow-500" />
+						<span className="font-bold text-yellow-600">{gameStats.score}</span>
 					</div>
+					<TimerDisplay 
+						timeLeft={timeLeft} 
+						totalTime={level?.timeLimit || 30} 
+						isUrgent={timeLeft <= 10}
+					/>
+					<HealthBar health={playerHealth} animated={true} />
+					{isSwimming && (
+						<StaminaBar stamina={playerStamina} isActive={true} />
+					)}
 				</div>
-				<div className="text-sm font-medium text-cyan-600">
-					🎯 {level?.objective || 'Loading objective...'}
-				</div>
+				
+				<ObjectiveDisplay 
+					objective={level?.objective || 'Loading objective...'}
+					isComplete={levelComplete}
+				/>
 			</div>
 
 			{/* Instructions */}
@@ -773,17 +700,36 @@ export function FloodGame2D({ gameStats, setGameStats, onGameComplete }: FloodGa
 						imageRendering: 'pixelated'
 					}}
 				/>
-				{/* Water level indicators */}
+				
+				{/* Enhanced overlay indicators */}
 				<div className="absolute top-2 left-2 flex items-center space-x-2 bg-black/20 rounded px-2 py-1">
 					<Droplets className="w-4 h-4 text-cyan-400" />
 					<span className="text-white text-xs font-bold">
-						{Math.round(((level.initialWaterLevel - waterLevel) / ((level.initialWaterLevel - (level.maxWaterLevel ?? 1)) || 1)) * 100)}%
+						{level ? Math.round(((level.initialWaterLevel - waterLevel) / ((level.initialWaterLevel - (level.maxWaterLevel ?? 1)) || 1)) * 100) : 0}%
 					</span>
 				</div>
 				<div className="absolute top-2 right-2 flex items-center space-x-2 bg-black/20 rounded px-2 py-1">
 					<Navigation className="w-4 h-4 text-white" />
-					<span className="text-white text-xs">Current: {level.currentFlow.x.toFixed(1)} m/s</span>
+					<span className="text-white text-xs">Current: {level?.currentFlow.x.toFixed(1) ?? '0.0'} m/s</span>
 				</div>
+				
+				{/* Mini Map */}
+				{level && (
+					<div className="absolute bottom-2 right-2">
+						<MiniMap
+							playerPosition={playerPosition}
+							safeZones={level.safeZones || []}
+							hazards={level.objects?.filter(obj => obj.type === 'debris' || obj.type === 'car').map(obj => ({
+								x: obj.x,
+								y: obj.y,
+								width: obj.width,
+								height: obj.height
+							})) || []}
+							canvasSize={{ width: 900, height: 400 }}
+							waterLevel={waterLevel}
+						/>
+					</div>
+				)}
 			</div>
 
 			{/* Level Progress Indicator */}

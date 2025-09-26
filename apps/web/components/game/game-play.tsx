@@ -26,10 +26,7 @@ interface GamePlayProps {
 export function GamePlay({ gameStats, setGameStats, onGameComplete }: GamePlayProps) {
 	const [scenarios, setScenarios] = useState<GameScenario[]>([]);
 	const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
-	const [timeLeft, setTimeLeft] = useState({
-		time: 0,
-		timeup: false,
-	});
+	const [timeLeft, setTimeLeft] = useState<number | null>(null);
 	const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
 	const [showFeedback, setShowFeedback] = useState(false);
 	const [isCorrect, setIsCorrect] = useState(false);
@@ -82,19 +79,13 @@ export function GamePlay({ gameStats, setGameStats, onGameComplete }: GamePlayPr
 	// Initialize timer for current scenario
 	useEffect(() => {
 		if (!showFeedback && currentScenario) {
-			setTimeLeft(prev => ({ ...prev, time: currentScenario.timeLimit}));
+			setTimeLeft(3);
 			const timer = setInterval(() => {
 				setTimeLeft(prev => {
-					if(prev.time === 0) {
-						return ({
-							...prev,
-							timeup: true
-						})
+					if(prev !== null) {
+						return Math.max(0, prev- 1)
 					}
-					return ({
-						...prev,
-						time: Math.max(0, prev.time - 1)
-					})
+					return null;
 				});
 			}, 1000);
 			
@@ -103,9 +94,9 @@ export function GamePlay({ gameStats, setGameStats, onGameComplete }: GamePlayPr
 	}, [currentScenarioIndex, showFeedback, currentScenario, handleTimeUp]);
 
 	useEffect(() => {
-		if (timeLeft.time === 0 && timeLeft.timeup && !showFeedback && currentScenario) {
+		if (timeLeft === 0 && !showFeedback && currentScenario) {
 			handleTimeUp();
-			setTimeLeft(prev => ({...prev, timeup: false}))
+			setTimeLeft(null);
 		}
 	}, [timeLeft, showFeedback, currentScenario, handleTimeUp]);
 
@@ -121,7 +112,7 @@ export function GamePlay({ gameStats, setGameStats, onGameComplete }: GamePlayPr
 		setShowFeedback(true);
 
 		// Calculate bonus for quick response
-		const timeBonus = timeLeft.time > (currentScenario.timeLimit * 0.75) ? 50 : 0;
+		const timeBonus = timeLeft! > (currentScenario.timeLimit * 0.75) ? 50 : 0;
 		const points = choice.correct ? choice.points + timeBonus : Math.max(0, choice.points - 25);
 
 		setGameStats(prev => ({
@@ -213,8 +204,8 @@ export function GamePlay({ gameStats, setGameStats, onGameComplete }: GamePlayPr
 					<div className="flex items-center space-x-4">
 						<div className="flex items-center space-x-2">
 							<Timer className="w-4 h-4 text-blue-500" />
-							<span className={`font-mono text-lg ${timeLeft.time <= 5 ? 'text-red-500 font-bold' : 'text-blue-500'}`}>
-								{timeLeft.time}s
+							<span className={`font-mono text-lg ${timeLeft!<= 5 ? 'text-red-500 font-bold' : 'text-blue-500'}`}>
+								{timeLeft ?? 0}s
 							</span>
 						</div>
 						<div className="flex items-center space-x-1">
@@ -296,7 +287,7 @@ export function GamePlay({ gameStats, setGameStats, onGameComplete }: GamePlayPr
 								{isCorrect ? (
 									<><CheckCircle className="w-5 h-5 text-green-500 mr-2" /> Correct!</>
 								) : (
-									<><XCircle className="w-5 h-5 text-red-500 mr-2" /> {timeLeft.time === 0 ? 'Time Up!' : 'Not Quite'}</>
+									<><XCircle className="w-5 h-5 text-red-500 mr-2" /> {timeLeft === 0 ? 'Time Up!' : 'Not Quite'}</>
 								)}
 							</h4>
 							<p className="text-muted-foreground">{currentExplanation}</p>

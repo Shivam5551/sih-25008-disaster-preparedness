@@ -81,8 +81,14 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`⚡️[server]: Disaster Education API running at http://localhost:${port}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Health check: http://localhost:${port}/health`);
-});
+// Export the Express app for Vercel
+export default app;
+
+// Only start the server if this file is run directly (not imported)
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`⚡️[server]: Disaster Education API running at http://localhost:${port}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Health check: http://localhost:${port}/health`);
+  });
+}
